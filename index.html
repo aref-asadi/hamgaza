@@ -117,14 +117,32 @@
         try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ error: `خطای شبکه: ${response.status}` }));
-                throw new Error(errorData.error || `خطای شبکه: ${response.status}`);
+                const errorData = await response.json().catch(() => ({ error: `خطای سرور: ${response.status}` }));
+                throw new Error(errorData.error);
             }
             return response.json();
         } catch (error) {
             console.error(`Error with endpoint ${endpoint}:`, error);
-            tg.showAlert(error.message || 'یک خطای ناشناخته رخ داد.');
+            if (error instanceof TypeError) { 
+                 const specificErrorMsg = 'خطای اتصال به سرور. این مشکل معمولاً به دلیل تنظیمات CORS در بک‌اند است. لطفاً کنسول مرورگر را برای جزئیات بیشتر بررسی کنید.';
+                 statusMessageDiv.innerHTML = `<p class="text-red-500 p-4 bg-red-900/50 rounded-lg">${specificErrorMsg}</p>`;
+                 tg.showAlert(specificErrorMsg);
+            } else {
+                 statusMessageDiv.innerHTML = `<p class="text-red-500 p-4 bg-red-900/50 rounded-lg">متاسفانه مشکلی پیش آمد: ${error.message}</p>`;
+                 tg.showAlert(error.message || 'یک خطای ناشناخته رخ داد.');
+            }
             throw error;
+        }
+    }
+    
+    async function fetchMenu() {
+        try {
+            const data = await fetchApi('/api/menu');
+            foodMenuData = data;
+            renderMenu();
+            statusMessageDiv.style.display = 'none';
+        } catch (error) {
+            console.error("Failed to execute fetchMenu:", error);
         }
     }
 
@@ -140,7 +158,8 @@
             });
             renderGroupStatus(newGroup);
             showPage('group-page');
-        } finally {
+        } catch(e) { /* Error is already handled by fetchApi */ }
+        finally {
             createButton.disabled = false;
             createButton.innerHTML = 'ایجاد گروه و پرداخت';
         }
@@ -157,7 +176,8 @@
                 body: JSON.stringify({ userInfo: currentUserInfo })
             });
             renderGroupStatus(updatedGroup);
-        } finally {
+        } catch(e) { /* Error is already handled by fetchApi */ }
+        finally {
             joinButton.disabled = false;
             joinButton.innerHTML = 'پیوستن به گروه';
         }
@@ -216,7 +236,6 @@
             actionButton = `<div class="mt-6 p-3 text-center bg-green-500 text-white font-bold rounded-lg">گروه تکمیل شد!</div>`;
         }
 
-        // Generate invitation link for Telegram
         const invitationLink = `https://t.me/YOUR_BOT_USERNAME?startapp=group_${groupData.groupId}`;
 
         groupStatusContent.innerHTML = `
@@ -249,7 +268,7 @@
     function copyInviteLink() {
         const input = document.getElementById('invite-link-input');
         input.select();
-        input.setSelectionRange(0, 99999); // For mobile devices
+        input.setSelectionRange(0, 99999);
         try {
             document.execCommand('copy');
             tg.showAlert('لینک دعوت کپی شد!');
@@ -271,13 +290,13 @@
         if (startParam && startParam.startsWith('group_')) {
             const groupId = startParam.split('_')[1];
             statusMessageDiv.innerHTML = `<div class="loader mx-auto"></div><p class="mt-4 text-gray-400">در حال بارگذاری اطلاعات گروه...</p>`;
-            showPage('home-page'); // Show loading on home page
+            showPage('home-page');
             try {
                 const groupData = await fetchApi(`/api/groups/${groupId}`);
                 renderGroupStatus(groupData);
                 showPage('group-page');
             } catch (error) {
-                showPage('home-page'); // Go back to home on error
+                showPage('home-page');
                 await fetchMenu();
             }
         } else {
