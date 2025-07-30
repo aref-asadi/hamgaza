@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مینی اپ سفارش گروهی غذا</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Font for Persian text -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Official Telegram Web App script -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+        body {
+            font-family: 'Vazirmatn', sans-serif;
+            color-scheme: dark; /* Ensures UI elements like scrollbars match the dark theme */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
+
+    <div class="container mx-auto p-4 text-center max-w-lg">
+        
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-yellow-300">هم‌غذا</h1>
+            <p class="text-lg text-gray-400 mt-2">پلتفرم سفارش گروهی غذا</p>
+        </header>
+
+        <main>
+            <div id="user-card" class="bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-700">
+                <h2 class="text-2xl font-bold mb-4">اطلاعات کاربری تلگرام</h2>
+                
+                <div id="loading" class="text-gray-400">
+                    در حال بارگذاری اطلاعات...
+                </div>
+
+                <div id="user-info" class="hidden space-y-3 text-right">
+                    <p><strong>نام:</strong> <span id="first-name-span" class="font-mono text-green-400"></span></p>
+                    <p><strong>نام کاربری:</strong> <span id="username-span" class="font-mono text-green-400"></span></p>
+                    <p><strong>شناسه کاربری:</strong> <span id="user-id-span" class="font-mono text-green-400"></span></p>
+                </div>
+
+                <div id="not-in-telegram" class="hidden text-red-400">
+                    <p>این برنامه باید از داخل تلگرام اجرا شود.</p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="mt-8 text-gray-500 text-sm">
+            <p>نسخه اولیه - گام دوم</p>
+        </footer>
+    </div>
+
+<script>
+    // Wait for the DOM to be fully loaded
+    document.addEventListener("DOMContentLoaded", function() {
+        // Get the Telegram Web App instance
+        const tg = window.Telegram.WebApp;
+
+        // Make the app responsive to theme changes
+        tg.onEvent('themeChanged', function() {
+            document.body.setAttribute('style', '--bg-color:' + tg.themeParams.bg_color + '; --text-color:' + tg.themeParams.text_color + ';');
+        });
+
+        const loadingDiv = document.getElementById('loading');
+        const userInfoDiv = document.getElementById('user-info');
+        const notInTelegramDiv = document.getElementById('not-in-telegram');
+
+        // Check if the app is running inside Telegram and user data is available
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            const user = tg.initDataUnsafe.user;
+            
+            // Show user info and hide loading message
+            loadingDiv.classList.add('hidden');
+            userInfoDiv.classList.remove('hidden');
+
+            // Populate the fields with user data
+            document.getElementById('first-name-span').textContent = user.first_name || 'تعریف نشده';
+            document.getElementById('username-span').textContent = user.username ? `@${user.username}` : 'تعریف نشده';
+            document.getElementById('user-id-span').textContent = user.id;
+
+        } else {
+            // If not in Telegram, show an error message
+            loadingDiv.classList.add('hidden');
+            notInTelegramDiv.classList.remove('hidden');
+        }
+
+        // Inform Telegram that the app is ready to be shown
+        tg.ready();
+        
+        // You can expand the app to full height
+        tg.expand();
+    });
+</script>
+
+</body>
+</html>
