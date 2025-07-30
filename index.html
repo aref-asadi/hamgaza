@@ -38,13 +38,18 @@
             padding: 0.75rem 1.5rem;
             border-radius: 0.5rem;
             transition: background-color 0.2s;
+            cursor: pointer;
         }
         .main-button:hover {
             background-color: #F59E0B; /* amber-500 */
         }
+        .main-button:disabled {
+            background-color: #9CA3AF; /* gray-400 */
+            cursor: not-allowed;
+        }
         .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #FBBF24;
+            border: 4px solid #4B5563; /* gray-600 */
+            border-top: 4px solid #FBBF24; /* yellow-400 */
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -75,9 +80,7 @@
                     <div class="loader mx-auto"></div>
                     <p class="mt-4 text-gray-400">در حال بارگذاری منو...</p>
                 </div>
-                <div id="food-menu-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Food cards will be injected here by JavaScript -->
-                </div>
+                <div id="food-menu-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
             </div>
 
             <!-- Page 2: Product Details -->
@@ -96,11 +99,11 @@
 
 <script>
     // --- CONFIGURATION ---
-    // !!! IMPORTANT: Replace this with your actual PythonAnywhere URL !!!
     const API_BASE_URL = "https://rareff.pythonanywhere.com"; 
 
     // --- GLOBAL STATE ---
     let foodMenuData = [];
+    let currentUserInfo = {};
 
     // --- TELEGRAM WEB APP INITIALIZATION ---
     const tg = window.Telegram.WebApp;
@@ -121,20 +124,48 @@
         window.scrollTo(0, 0);
     }
 
-    // --- DATA FETCHING ---
+    // --- DATA FETCHING & SENDING ---
     async function fetchMenu() {
         try {
             const response = await fetch(`${API_BASE_URL}/api/menu`);
-            if (!response.ok) {
-                throw new Error(`خطای شبکه: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`Network error: ${response.status}`);
             const data = await response.json();
             foodMenuData = data;
             renderMenu();
-            statusMessageDiv.style.display = 'none'; // Hide loading message
+            statusMessageDiv.style.display = 'none';
         } catch (error) {
-            console.error("خطا در دریافت منو:", error);
-            statusMessageDiv.innerHTML = `<p class="text-red-500">متاسفانه در دریافت اطلاعات مشکلی پیش آمد. لطفا دوباره تلاش کنید.</p>`;
+            console.error("Error fetching menu:", error);
+            statusMessageDiv.innerHTML = `<p class="text-red-500">متاسفانه در دریافت اطلاعات مشکلی پیش آمد.</p>`;
+        }
+    }
+
+    async function createGroup(itemId) {
+        const createButton = document.querySelector('#product-page .main-button');
+        createButton.disabled = true;
+        createButton.innerHTML = '<div class="loader mx-auto" style="width:24px; height:24px; border-width: 2px;"></div>';
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/groups`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    foodId: itemId,
+                    userInfo: currentUserInfo
+                })
+            });
+
+            if (!response.ok) throw new Error(`Server error: ${response.status}`);
+            
+            const newGroup = await response.json();
+            renderGroupStatus(newGroup);
+            showPage('group-page');
+
+        } catch (error) {
+            console.error("Error creating group:", error);
+            tg.showAlert('خطا در ایجاد گروه. لطفا دوباره تلاش کنید.');
+        } finally {
+            createButton.disabled = false;
+            createButton.innerHTML = 'ایجاد گروه و پرداخت';
         }
     }
 
@@ -179,25 +210,51 @@
         `;
         showPage('product-page');
     }
-    
-    function createGroup(itemId) {
-        // Mock-up for now. This will be implemented in the next steps.
-        const item = foodMenuData.find(p => p.id === itemId);
-        groupStatusContent.innerHTML = `<h3 class="text-2xl font-bold">در حال ساخت گروه برای ${item.name}...</h3>`;
-        showPage('group-page');
-        // In a real scenario, we would call a POST /api/groups endpoint here.
+
+    function renderGroupStatus(groupData) {
+        const progress = (groupData.members.length / groupData.minMembers) * 100;
+        const invitationLink = `${API_BASE_URL}/join?group=${groupData.groupId}`; // Example link
+
+        groupStatusContent.innerHTML = `
+            <h3 class="text-2xl font-bold mb-4">گروه برای ${groupData.foodName}</h3>
+            <p class="text-gray-400 mb-6">گروه شما با شناسه <span class="font-mono text-yellow-400">${groupData.groupId}</span> ایجاد شد!</p>
+            
+            <div class="mb-4">
+                <p class="text-sm text-gray-300 mb-1">${groupData.members.length} از ${groupData.minMembers} نفر تکمیل شده</p>
+                <div class="w-full bg-gray-600 rounded-full h-2.5">
+                    <div class="bg-yellow-400 h-2.5 rounded-full" style="width: ${progress}%"></div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-300 mb-2">لینک دعوت شما:</label>
+                <div class="flex items-center">
+                    <input type="text" readonly value="${invitationLink}" class="w-full p-2 bg-gray-900 border border-gray-600 rounded-lg text-gray-300 font-mono text-sm">
+                    <button onclick="tg.openLink('${invitationLink}')" class="mr-2 p-2 bg-gray-600 rounded-lg hover:bg-gray-500">اشتراک</button>
+                </div>
+            </div>
+            
+            <div class="mt-6">
+                <h4 class="font-bold mb-2">اعضای گروه:</h4>
+                <ul class="list-disc pr-5 text-gray-300">
+                    ${groupData.members.map(member => `<li>${member.first_name} (@${member.username || '...'})</li>`).join('')}
+                </ul>
+            </div>
+        `;
     }
 
     // --- INITIALIZATION ---
     document.addEventListener("DOMContentLoaded", function() {
         if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-            const user = tg.initDataUnsafe.user;
-            welcomeMessage.textContent = `خوش آمدی، ${user.first_name}!`;
+            currentUserInfo = tg.initDataUnsafe.user;
+            welcomeMessage.textContent = `خوش آمدی، ${currentUserInfo.first_name}!`;
         } else {
             welcomeMessage.textContent = `لطفا از داخل تلگرام وارد شوید.`;
+            // For testing in browser, create a mock user
+            currentUserInfo = { id: 123, first_name: 'تست', username: 'testuser' };
         }
         
-        fetchMenu(); // Fetch menu from the backend
+        fetchMenu();
         showPage('home-page');
     });
 
