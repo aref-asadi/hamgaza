@@ -22,12 +22,8 @@
             color-scheme: dark;
             background-color: #111827; /* bg-gray-900 */
         }
-        .page {
-            display: none; /* All pages are hidden by default */
-        }
-        .page.active {
-            display: block; /* The active page is shown */
-        }
+        .page { display: none; }
+        .page.active { display: block; }
         .food-card {
             transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
         }
@@ -46,6 +42,18 @@
         .main-button:hover {
             background-color: #F59E0B; /* amber-500 */
         }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #FBBF24;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -57,15 +65,16 @@
                 <h1 class="text-2xl font-extrabold text-yellow-400">هم‌غذا</h1>
                 <p id="welcome-message" class="text-sm text-gray-400">خوش آمدید!</p>
             </div>
-            <div id="user-info" class="text-xs text-right">
-                <p id="user-id-span" class="font-mono text-green-400"></p>
-            </div>
         </header>
 
         <main>
             <!-- Page 1: Home - Food Menu -->
             <div id="home-page" class="page active">
                 <h2 class="text-2xl font-bold mb-6">منوی امروز</h2>
+                <div id="status-message" class="text-center p-8">
+                    <div class="loader mx-auto"></div>
+                    <p class="mt-4 text-gray-400">در حال بارگذاری منو...</p>
+                </div>
                 <div id="food-menu-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <!-- Food cards will be injected here by JavaScript -->
                 </div>
@@ -74,33 +83,24 @@
             <!-- Page 2: Product Details -->
             <div id="product-page" class="page">
                 <button onclick="showPage('home-page')" class="mb-6 text-yellow-400">&rarr; بازگشت به منو</button>
-                <div id="product-details-content" class="bg-gray-800 rounded-xl p-6">
-                    <!-- Product details will be injected here -->
-                </div>
+                <div id="product-details-content" class="bg-gray-800 rounded-xl p-6"></div>
             </div>
 
             <!-- Page 3: Group Status -->
             <div id="group-page" class="page">
                 <button onclick="showPage('home-page')" class="mb-6 text-yellow-400">&rarr; بازگشت به منو</button>
-                <div id="group-status-content" class="bg-gray-800 rounded-xl p-6">
-                     <!-- Group status will be injected here -->
-                </div>
+                <div id="group-status-content" class="bg-gray-800 rounded-xl p-6"></div>
             </div>
         </main>
-
-        <footer class="mt-8 text-center text-gray-500 text-sm">
-            <p>نسخه 0.2.0 - گام سوم</p>
-        </footer>
     </div>
 
 <script>
-    // --- MOCK DATA (will be replaced by API calls) ---
-    const MOCK_FOOD_MENU = [
-        { id: 1, name: 'پیتزا پپرونی خانواده', description: 'یک پیتزای تند و خوشمزه با پپرونی فراوان و پنیر موتزارلا.', price: 250000, groupPrice: 190000, minMembers: 5, image: 'https://placehold.co/600x400/f87171/ffffff?text=Pizza' },
-        { id: 2, name: 'چیزبرگر مخصوص دوبل', description: 'دو لایه برگر گوشت تازه، پنیر گودا، همراه با سس مخصوص.', price: 180000, groupPrice: 140000, minMembers: 4, image: 'https://placehold.co/600x400/fbbf24/ffffff?text=Burger' },
-        { id: 3, name: 'پاستا آلفردو با مرغ', description: 'پنه آلفردو با سس خامه‌ای غلیظ و تکه‌های مرغ گریل شده.', price: 220000, groupPrice: 170000, minMembers: 5, image: 'https://placehold.co/600x400/a78bfa/ffffff?text=Pasta' },
-        { id: 4, name: 'سالاد سزار ویژه', description: 'کاهو، نان تست، پنیر پارمزان و سس سزار دست‌ساز.', price: 110000, groupPrice: 80000, minMembers: 6, image: 'https://placehold.co/600x400/4ade80/ffffff?text=Salad' }
-    ];
+    // --- CONFIGURATION ---
+    // !!! IMPORTANT: Replace this with your actual PythonAnywhere URL !!!
+    const API_BASE_URL = "https://rareff.pythonanywhere.com"; 
+
+    // --- GLOBAL STATE ---
+    let foodMenuData = [];
 
     // --- TELEGRAM WEB APP INITIALIZATION ---
     const tg = window.Telegram.WebApp;
@@ -109,29 +109,45 @@
 
     // --- UI ELEMENTS ---
     const welcomeMessage = document.getElementById('welcome-message');
-    const userIdSpan = document.getElementById('user-id-span');
     const foodMenuGrid = document.getElementById('food-menu-grid');
     const productDetailsContent = document.getElementById('product-details-content');
     const groupStatusContent = document.getElementById('group-status-content');
+    const statusMessageDiv = document.getElementById('status-message');
 
     // --- NAVIGATION ---
     function showPage(pageId) {
         document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
         document.getElementById(pageId).classList.add('active');
-        window.scrollTo(0, 0); // Scroll to top on page change
+        window.scrollTo(0, 0);
+    }
+
+    // --- DATA FETCHING ---
+    async function fetchMenu() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/menu`);
+            if (!response.ok) {
+                throw new Error(`خطای شبکه: ${response.status}`);
+            }
+            const data = await response.json();
+            foodMenuData = data;
+            renderMenu();
+            statusMessageDiv.style.display = 'none'; // Hide loading message
+        } catch (error) {
+            console.error("خطا در دریافت منو:", error);
+            statusMessageDiv.innerHTML = `<p class="text-red-500">متاسفانه در دریافت اطلاعات مشکلی پیش آمد. لطفا دوباره تلاش کنید.</p>`;
+        }
     }
 
     // --- RENDER FUNCTIONS ---
     function renderMenu() {
-        foodMenuGrid.innerHTML = ''; // Clear previous items
-        MOCK_FOOD_MENU.forEach(item => {
+        foodMenuGrid.innerHTML = '';
+        foodMenuData.forEach(item => {
             const card = document.createElement('div');
             card.className = 'food-card bg-gray-800 rounded-xl overflow-hidden shadow-lg cursor-pointer';
             card.innerHTML = `
-                <img src="${item.image}" alt="${item.name}" class="w-full h-48 object-cover">
+                <img src="${item.image}" alt="${item.name}" class="w-full h-48 object-cover" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/ffffff?text=Image+Error';">
                 <div class="p-4">
                     <h3 class="text-xl font-bold">${item.name}</h3>
-                    <p class="text-gray-400 text-sm my-2 h-10">${item.description}</p>
                     <div class="flex justify-between items-center mt-4">
                         <span class="text-lg font-bold text-yellow-400">${item.groupPrice.toLocaleString('fa-IR')} تومان</span>
                         <span class="text-sm text-gray-500 line-through">${item.price.toLocaleString('fa-IR')}</span>
@@ -144,21 +160,17 @@
     }
 
     function showProductDetails(itemId) {
-        const item = MOCK_FOOD_MENU.find(p => p.id === itemId);
+        const item = foodMenuData.find(p => p.id === itemId);
         productDetailsContent.innerHTML = `
-            <img src="${item.image}" alt="${item.name}" class="w-full h-64 object-cover rounded-lg mb-4">
+            <img src="${item.image}" alt="${item.name}" class="w-full h-64 object-cover rounded-lg mb-4" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/ffffff?text=Image+Error';">
             <h3 class="text-3xl font-extrabold mb-2">${item.name}</h3>
             <p class="text-gray-300 mb-6">${item.description}</p>
             <div class="bg-gray-700 p-4 rounded-lg space-y-3">
-                <div class="flex justify-between items-center">
-                    <span class="text-gray-400">قیمت اصلی:</span>
-                    <span class="text-lg font-bold line-through">${item.price.toLocaleString('fa-IR')} تومان</span>
-                </div>
                 <div class="flex justify-between items-center text-yellow-400">
                     <span class="font-bold">قیمت با تخفیف گروهی:</span>
                     <span class="text-2xl font-extrabold">${item.groupPrice.toLocaleString('fa-IR')} تومان</span>
                 </div>
-                 <div class="flex justify-between items-center text-green-400 border-t border-gray-600 pt-3">
+                 <div class="flex justify-between items-center text-green-400 border-t border-gray-600 pt-3 mt-3">
                     <span class="font-bold">حد نصاب گروه:</span>
                     <span class="text-lg font-bold">${item.minMembers} نفر</span>
                 </div>
@@ -169,37 +181,11 @@
     }
     
     function createGroup(itemId) {
-        const item = MOCK_FOOD_MENU.find(p => p.id === itemId);
-        // This is a mock-up. In a real app, this would call the backend.
-        groupStatusContent.innerHTML = `
-            <h3 class="text-2xl font-bold mb-4">گروه برای ${item.name}</h3>
-            <p class="text-gray-400 mb-6">گروه شما با موفقیت ایجاد شد! حالا دوستانتان را دعوت کنید.</p>
-            
-            <!-- Progress Bar -->
-            <div class="mb-4">
-                <p class="text-sm text-gray-300 mb-1">۱ از ${item.minMembers} نفر تکمیل شده</p>
-                <div class="w-full bg-gray-600 rounded-full h-2.5">
-                    <div class="bg-yellow-400 h-2.5 rounded-full" style="width: ${(1/item.minMembers)*100}%"></div>
-                </div>
-            </div>
-
-            <!-- Countdown Timer -->
-            <div class="text-center my-6">
-                <p class="text-gray-400">زمان باقی‌مانده برای تکمیل گروه:</p>
-                <p class="text-4xl font-mono font-bold text-red-500">23:59:45</p>
-            </div>
-
-            <!-- Invitation Link -->
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-300 mb-2">لینک دعوت شما:</label>
-                <div class="flex items-center">
-                    <input type="text" readonly value="https://t.me/yourbot/app?startapp=group${Math.floor(Math.random()*1000)}" class="w-full p-2 bg-gray-900 border border-gray-600 rounded-lg text-gray-300 font-mono text-sm">
-                    <button class="mr-2 p-2 bg-gray-600 rounded-lg hover:bg-gray-500">کپی</button>
-                </div>
-            </div>
-            
-        `;
+        // Mock-up for now. This will be implemented in the next steps.
+        const item = foodMenuData.find(p => p.id === itemId);
+        groupStatusContent.innerHTML = `<h3 class="text-2xl font-bold">در حال ساخت گروه برای ${item.name}...</h3>`;
         showPage('group-page');
+        // In a real scenario, we would call a POST /api/groups endpoint here.
     }
 
     // --- INITIALIZATION ---
@@ -207,13 +193,12 @@
         if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
             const user = tg.initDataUnsafe.user;
             welcomeMessage.textContent = `خوش آمدی، ${user.first_name}!`;
-            userIdSpan.textContent = `ID: ${user.id}`;
         } else {
             welcomeMessage.textContent = `لطفا از داخل تلگرام وارد شوید.`;
         }
         
-        renderMenu(); // Render the initial food menu
-        showPage('home-page'); // Make sure home page is active on load
+        fetchMenu(); // Fetch menu from the backend
+        showPage('home-page');
     });
 
 </script>
