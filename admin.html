@@ -12,15 +12,19 @@
         <h1 class="text-3xl font-bold mb-6">پنل مدیریت منوی غذا</h1>
 
         <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-            <h2 class="text-xl font-bold mb-4">افزودن غذای جدید</h2>
-            <form id="add-food-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <h2 id="form-title" class="text-xl font-bold mb-4">افزودن غذای جدید</h2>
+            <form id="food-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input type="hidden" id="food-id">
                 <input type="text" id="name" placeholder="نام غذا" class="p-2 border rounded" required>
                 <input type="number" id="price" placeholder="قیمت اصلی (تومان)" class="p-2 border rounded" required>
                 <input type="number" id="groupPrice" placeholder="قیمت گروهی (تومان)" class="p-2 border rounded" required>
                 <input type="number" id="minMembers" placeholder="حد نصاب اعضا" class="p-2 border rounded" required>
                 <input type="text" id="image" placeholder="URL تصویر" class="p-2 border rounded col-span-1 md:col-span-2">
                 <textarea id="description" placeholder="توضیحات" class="p-2 border rounded col-span-1 md:col-span-2" required></textarea>
-                <button type="submit" class="bg-blue-600 text-white p-3 rounded-lg font-bold col-span-1 md:col-span-2 hover:bg-blue-700">افزودن غذا</button>
+                <div class="col-span-1 md:col-span-2 flex items-center gap-4">
+                    <button type="submit" id="submit-btn" class="bg-blue-600 text-white p-3 rounded-lg font-bold flex-grow hover:bg-blue-700">افزودن غذا</button>
+                    <button type="button" id="cancel-btn" class="bg-gray-500 text-white p-3 rounded-lg font-bold hidden hover:bg-gray-600">لغو ویرایش</button>
+                </div>
             </form>
         </div>
 
@@ -36,20 +40,23 @@
     const API_BASE_URL = "https://rareff.pythonanywhere.com";
     const SECRET_KEY = prompt("لطفا کلید مخفی ادمین را وارد کنید:", "");
 
-    const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SECRET_KEY}`
-    };
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SECRET_KEY}` };
 
     const foodListDiv = document.getElementById('food-list');
-    const addFoodForm = document.getElementById('add-food-form');
+    const foodForm = document.getElementById('food-form');
+    const formTitle = document.getElementById('form-title');
+    const submitBtn = document.getElementById('submit-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const foodIdInput = document.getElementById('food-id');
+
+    let allFoods = [];
 
     async function fetchFoods() {
         try {
             const response = await fetch(`${API_BASE_URL}/api/admin/foods`, { headers });
-            if (!response.ok) throw new Error('خطا در دریافت لیست غذاها');
-            const foods = await response.json();
-            renderFoods(foods);
+            if (!response.ok) throw new Error('خطا در دریافت لیست غذاها. کلید مخفی را بررسی کنید.');
+            allFoods = await response.json();
+            renderFoods(allFoods);
         } catch (error) {
             foodListDiv.innerHTML = `<p class="text-red-500">${error.message}</p>`;
         }
@@ -63,9 +70,10 @@
             card.innerHTML = `
                 <div class="flex justify-between items-center">
                     <h3 class="font-bold text-lg">${food.name} - ${food.groupPrice.toLocaleString('fa-IR')} تومان</h3>
-                    <div>
+                    <div class="flex gap-2">
+                        <button onclick="editFood(${food.id})" class="text-sm px-3 py-1 rounded bg-yellow-500 text-white">ویرایش</button>
                         <button onclick="toggleStatus(${food.id}, ${food.is_active ? 0 : 1})" class="text-sm px-3 py-1 rounded ${food.is_active ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}">
-                            ${food.is_active ? 'غیرفعال کردن' : 'فعال کردن'}
+                            ${food.is_active ? 'غیرفعال' : 'فعال'}
                         </button>
                     </div>
                 </div>
@@ -74,8 +82,42 @@
         });
     }
 
-    addFoodForm.addEventListener('submit', async (e) => {
+    function editFood(id) {
+        const food = allFoods.find(f => f.id === id);
+        if (!food) return;
+        
+        formTitle.textContent = `ویرایش: ${food.name}`;
+        foodIdInput.value = food.id;
+        document.getElementById('name').value = food.name;
+        document.getElementById('price').value = food.price;
+        document.getElementById('groupPrice').value = food.groupPrice;
+        document.getElementById('minMembers').value = food.minMembers;
+        document.getElementById('image').value = food.image;
+        document.getElementById('description').value = food.description;
+        
+        submitBtn.textContent = 'ذخیره تغییرات';
+        submitBtn.classList.replace('bg-blue-600', 'bg-green-600');
+        submitBtn.classList.replace('hover:bg-blue-700', 'hover:bg-green-700');
+        cancelBtn.classList.remove('hidden');
+        window.scrollTo(0, 0);
+    }
+
+    cancelBtn.addEventListener('click', () => {
+        formTitle.textContent = 'افزودن غذای جدید';
+        foodForm.reset();
+        foodIdInput.value = '';
+        submitBtn.textContent = 'افزودن غذا';
+        submitBtn.classList.replace('bg-green-600', 'bg-blue-600');
+        submitBtn.classList.replace('hover:bg-green-700', 'hover:bg-blue-700');
+        cancelBtn.classList.add('hidden');
+    });
+
+    foodForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const id = foodIdInput.value;
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `${API_BASE_URL}/api/admin/foods/${id}` : `${API_BASE_URL}/api/admin/foods`;
+
         const formData = {
             name: document.getElementById('name').value,
             price: parseInt(document.getElementById('price').value),
@@ -84,14 +126,11 @@
             image: document.getElementById('image').value,
             description: document.getElementById('description').value,
         };
+
         try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/foods`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(formData)
-            });
-            if (!response.ok) throw new Error('خطا در افزودن غذا');
-            addFoodForm.reset();
+            const response = await fetch(url, { method, headers, body: JSON.stringify(formData) });
+            if (!response.ok) throw new Error(`خطا در ${id ? 'ویرایش' : 'افزودن'} غذا`);
+            cancelBtn.click(); // Reset form
             fetchFoods();
         } catch (error) {
             alert(error.message);
