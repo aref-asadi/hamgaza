@@ -86,9 +86,7 @@
             return text ? JSON.parse(text) : {};
         } catch (error) {
             console.error(`Error with endpoint ${endpoint}:`, error);
-            const errorMessage = (error instanceof TypeError) 
-                ? 'خطای اتصال به سرور. لطفاً از فعال بودن VPN خود (در صورت نیاز) اطمینان حاصل کنید.'
-                : error.message || 'یک خطای ناشناخته رخ داد.';
+            const errorMessage = (error instanceof TypeError) ? 'خطای اتصال به سرور.' : error.message || 'یک خطای ناشناخته رخ داد.';
             tg.showAlert(errorMessage);
             statusMessageDiv.innerHTML = `<p class="text-red-500 p-4 bg-red-900/50 rounded-lg">${errorMessage}</p>`;
             throw error;
@@ -101,22 +99,24 @@
             foodMenuData = data;
             renderMenu();
             statusMessageDiv.style.display = 'none';
-        } catch (error) {
-            console.error("Failed to execute fetchMenu:", error);
-        }
+        } catch (error) { console.error("Failed to execute fetchMenu:", error); }
     }
 
-    async function startPaymentFlow(itemId) {
+    async function startPaymentFlow(itemId, groupId = null) {
         const button = document.querySelector(`#product-page .main-button, #group-page .main-button`);
         if(button) {
             button.disabled = true;
             button.innerHTML = '<div class="loader mx-auto" style="width:24px; height:24px; border-width: 2px;"></div>';
         }
         try {
+            const payload = { foodId: itemId, userInfo: currentUserInfo };
+            if (groupId) {
+                payload.groupId = groupId;
+            }
             const response = await fetchApi('/api/payment/request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ foodId: itemId, userInfo: currentUserInfo })
+                body: JSON.stringify(payload)
             });
             if (response.payment_url) {
                 tg.openLink(response.payment_url);
@@ -127,7 +127,7 @@
         finally {
             if(button){
                 button.disabled = false;
-                button.innerHTML = button.id === 'join-btn' ? 'پیوستن به گروه و پرداخت' : 'ایجاد گروه و پرداخت';
+                button.innerHTML = groupId ? 'پیوستن به گروه و پرداخت' : 'ایجاد گروه جدید و پرداخت';
             }
         }
     }
@@ -152,7 +152,7 @@
         });
     }
 
-    function showProductDetails(itemId) {
+    async function showProductDetails(itemId) {
         const item = foodMenuData.find(p => p.id === itemId);
         productDetailsContent.innerHTML = `
             <img src="${item.image}" alt="${item.name}" class="w-full h-64 object-cover rounded-lg mb-4" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/ffffff?text=Image+Error';">
@@ -168,9 +168,40 @@
                     <span class="text-lg font-bold">${item.minMembers} نفر</span>
                 </div>
             </div>
-            <button onclick="startPaymentFlow(${item.id})" class="main-button w-full mt-6">ایجاد گروه و پرداخت</button>
+            <button onclick="startPaymentFlow(${item.id})" class="main-button w-full mt-6">ایجاد گروه جدید و پرداخت</button>
+            <div id="active-groups-container" class="mt-8"></div>
         `;
         showPage('product-page');
+
+        const activeGroupsContainer = document.getElementById('active-groups-container');
+        activeGroupsContainer.innerHTML = '<p class="text-center text-gray-400">در حال جستجوی گروه‌های فعال...</p>';
+        try {
+            const activeGroups = await fetchApi(`/api/foods/${itemId}/groups`);
+            if(activeGroups.length > 0) {
+                activeGroupsContainer.innerHTML = '<h4 class="text-lg font-bold mb-4">به گروه‌های موجود بپیوندید:</h4>';
+                const list = document.createElement('div');
+                list.className = 'space-y-3';
+                activeGroups.forEach(group => {
+                    const groupEl = document.createElement('div');
+                    groupEl.className = 'bg-gray-700 p-3 rounded-lg flex justify-between items-center cursor-pointer hover:bg-gray-600';
+                    groupEl.innerHTML = `
+                        <span>گروه #${group.id}</span>
+                        <span class="text-yellow-400">${group.member_count} / ${group.minMembers} نفر</span>
+                    `;
+                    groupEl.onclick = async () => {
+                        const groupDetails = await fetchApi(`/api/groups/${group.id}`);
+                        renderGroupStatus(groupDetails);
+                        showPage('group-page');
+                    };
+                    list.appendChild(groupEl);
+                });
+                activeGroupsContainer.appendChild(list);
+            } else {
+                activeGroupsContainer.innerHTML = '<p class="text-center text-gray-500">در حال حاضر گروه فعالی برای این غذا وجود ندارد.</p>';
+            }
+        } catch (e) {
+            activeGroupsContainer.innerHTML = '<p class="text-center text-red-500">خطا در دریافت لیست گروه‌ها.</p>';
+        }
     }
 
     function renderGroupStatus(groupData) {
@@ -186,7 +217,7 @@
             statusDisplay = `<div class="mt-6 p-3 text-center bg-green-600 text-white font-bold rounded-lg">گروه تکمیل شد!</div>`;
         } else { // status is 'pending'
             if (!isMember) {
-                actionButton = `<button id="join-btn" onclick="startPaymentFlow(${groupData.foodId})" class="main-button w-full mt-6">پیوستن به گروه و پرداخت</button>`;
+                actionButton = `<button id="join-btn" onclick="startPaymentFlow(${groupData.foodId}, ${groupData.groupId})" class="main-button w-full mt-6">پیوستن به گروه و پرداخت</button>`;
             }
             statusDisplay = `
                 <div id="countdown-timer-container" class="text-center my-6">
