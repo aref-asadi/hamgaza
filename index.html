@@ -225,7 +225,6 @@
                     <p id="countdown-timer" class="text-4xl font-mono font-bold text-red-500">00:00:00</p>
                 </div>
             `;
-            startCountdown(groupData.timeRemaining);
         }
 
         const invitationLink = `https://t.me/${BOT_USERNAME}/app?startapp=group_${groupData.groupId}`;
@@ -253,6 +252,10 @@
             </div>
             ${actionButton}
         `;
+        
+        if (groupData.status === 'pending') {
+            startCountdown(groupData.timeRemaining);
+        }
     }
     
     function startCountdown(remainingSeconds) {
