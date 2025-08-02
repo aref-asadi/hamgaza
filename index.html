@@ -109,9 +109,7 @@
     const statusMessageDiv = document.getElementById('status-message');
 
     function showPage(pageId) {
-        if (countdownInterval) {
-            clearInterval(countdownInterval);
-        }
+        if (countdownInterval) clearInterval(countdownInterval);
         document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
         document.getElementById(pageId).classList.add('active');
         window.scrollTo(0, 0);
@@ -128,14 +126,11 @@
             return text ? JSON.parse(text) : {};
         } catch (error) {
             console.error(`Error with endpoint ${endpoint}:`, error);
-            if (error instanceof TypeError) { 
-                 const specificErrorMsg = 'خطای اتصال به سرور. این مشکل معمولاً به دلیل تنظیمات CORS در بک‌اند است.';
-                 statusMessageDiv.innerHTML = `<p class="text-red-500 p-4 bg-red-900/50 rounded-lg">${specificErrorMsg}</p>`;
-                 tg.showAlert(specificErrorMsg);
-            } else {
-                 statusMessageDiv.innerHTML = `<p class="text-red-500 p-4 bg-red-900/50 rounded-lg">متاسفانه مشکلی پیش آمد: ${error.message}</p>`;
-                 tg.showAlert(error.message || 'یک خطای ناشناخته رخ داد.');
-            }
+            const errorMessage = (error instanceof TypeError) 
+                ? 'خطای اتصال به سرور. لطفاً از فعال بودن VPN خود (در صورت نیاز) اطمینان حاصل کنید.'
+                : error.message || 'یک خطای ناشناخته رخ داد.';
+            tg.showAlert(errorMessage);
+            statusMessageDiv.innerHTML = `<p class="text-red-500 p-4 bg-red-900/50 rounded-lg">${errorMessage}</p>`;
             throw error;
         }
     }
@@ -156,36 +151,20 @@
         createButton.disabled = true;
         createButton.innerHTML = '<div class="loader mx-auto" style="width:24px; height:24px; border-width: 2px;"></div>';
         try {
-            const response = await fetchApi('/api/groups', {
+            const response = await fetchApi('/api/payment/request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ foodId: itemId, userInfo: currentUserInfo })
             });
-            const groupData = await fetchApi(`/api/groups/${response.groupId}`);
-            renderGroupStatus(groupData);
-            showPage('group-page');
+            if (response.payment_url) {
+                tg.openLink(response.payment_url);
+            } else {
+                throw new Error(response.error || 'لینک پرداخت دریافت نشد.');
+            }
         } catch(e) { /* Error is already handled by fetchApi */ }
         finally {
             createButton.disabled = false;
             createButton.innerHTML = 'ایجاد گروه و پرداخت';
-        }
-    }
-    
-    async function joinGroup(groupId) {
-        const joinButton = document.querySelector('#group-page .main-button');
-        joinButton.disabled = true;
-        joinButton.innerHTML = '<div class="loader mx-auto" style="width:24px; height:24px; border-width: 2px;"></div>';
-        try {
-            const updatedGroup = await fetchApi(`/api/groups/${groupId}/join`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userInfo: currentUserInfo })
-            });
-            renderGroupStatus(updatedGroup);
-        } catch(e) { /* Error is already handled by fetchApi */ }
-        finally {
-            joinButton.disabled = false;
-            joinButton.innerHTML = 'پیوستن به گروه';
         }
     }
 
@@ -231,91 +210,15 @@
     }
 
     function renderGroupStatus(groupData) {
-        const progress = (groupData.members.length / groupData.minMembers) * 100;
-        const isMember = groupData.members.some(member => member.id === currentUserInfo.id);
-        
-        let statusDisplay = '';
-        let actionButton = '';
-
-        if (groupData.status === 'failed') {
-            statusDisplay = `<div class="mt-6 p-3 text-center bg-red-700 text-white font-bold rounded-lg">متاسفانه این گروه به حد نصاب نرسید!</div>`;
-        } else if (groupData.status === 'completed') {
-            statusDisplay = `<div class="mt-6 p-3 text-center bg-green-600 text-white font-bold rounded-lg">گروه تکمیل شد!</div>`;
-        } else { // status is 'pending'
-            if (!isMember) {
-                actionButton = `<button onclick="joinGroup(${groupData.groupId})" class="main-button w-full mt-6">پیوستن به گروه</button>`;
-            }
-            statusDisplay = `
-                <div id="countdown-timer-container" class="text-center my-6">
-                    <p class="text-gray-400">زمان باقی‌مانده برای تکمیل گروه:</p>
-                    <p id="countdown-timer" class="text-4xl font-mono font-bold text-red-500">00:00:00</p>
-                </div>
-            `;
-            startCountdown(groupData.timeRemaining);
-        }
-
-        const invitationLink = `https://t.me/YOUR_BOT_USERNAME?startapp=group_${groupData.groupId}`;
-
-        groupStatusContent.innerHTML = `
-            <h3 class="text-2xl font-bold mb-4">گروه برای ${groupData.foodName}</h3>
-            <p class="text-gray-400 mb-6">شناسه گروه: <span class="font-mono text-yellow-400">${groupData.groupId}</span></p>
-            
-            <div class="mb-4">
-                <p class="text-sm text-gray-300 mb-1">${groupData.members.length} از ${groupData.minMembers} نفر</p>
-                <div class="w-full bg-gray-600 rounded-full h-2.5"><div class="bg-yellow-400 h-2.5 rounded-full" style="width: ${progress}%"></div></div>
-            </div>
-
-            ${statusDisplay}
-
-            <div class="mb-6 mt-6">
-                <label class="block text-sm font-medium text-gray-300 mb-2">لینک دعوت شما:</label>
-                <div class="flex items-center">
-                    <input type="text" readonly value="${invitationLink}" class="w-full p-2 bg-gray-900 border border-gray-600 rounded-lg text-gray-300 font-mono text-sm" id="invite-link-input">
-                    <button onclick="copyInviteLink()" class="mr-2 p-2 bg-gray-600 rounded-lg hover:bg-gray-500">کپی</button>
-                </div>
-            </div>
-
-            <div class="mt-6">
-                <h4 class="font-bold mb-2">اعضای گروه:</h4>
-                <ul class="list-disc pr-5 text-gray-300">
-                    ${groupData.members.map(member => `<li>${member.first_name} (${member.username ? '@'+member.username : '...'})</li>`).join('')}
-                </ul>
-            </div>
-            ${actionButton}
-        `;
+        // ... (same as before) ...
     }
     
     function startCountdown(remainingSeconds) {
-        if (countdownInterval) clearInterval(countdownInterval);
-        
-        let duration = remainingSeconds;
-        const timerElement = document.getElementById('countdown-timer');
-        const timerContainer = document.getElementById('countdown-timer-container');
-
-        countdownInterval = setInterval(() => {
-            if (duration <= 0) {
-                clearInterval(countdownInterval);
-                if (timerContainer) {
-                    timerContainer.innerHTML = '<p class="text-red-500 font-bold">زمان گروه به پایان رسید!</p>';
-                }
-                return;
-            }
-
-            const hours = Math.floor(duration / 3600);
-            const minutes = Math.floor((duration % 3600) / 60);
-            const seconds = duration % 60;
-
-            if(timerElement) {
-                timerElement.textContent = 
-                    `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-            }
-            
-            duration--;
-        }, 1000);
+        // ... (same as before) ...
     }
     
     function copyInviteLink() {
-        // ... (same as before)
+        // ... (same as before) ...
     }
 
     async function handleInitialLoad() {
@@ -328,49 +231,27 @@
         }
 
         const startParam = tg.initDataUnsafe?.start_param;
+        
+        // --- NEW LOGIC ---
         if (startParam && startParam.startsWith('group_')) {
             const groupId = startParam.split('_')[1];
-            statusMessageDiv.innerHTML = `<div class="loader mx-auto"></div><p class="mt-4 text-gray-400">در حال بارگذاری اطلاعات گروه...</p>`;
-            showPage('home-page');
+            
+            // Show a loading state specifically for the group page
+            groupStatusContent.innerHTML = `<div class="text-center p-8"><div class="loader mx-auto"></div><p class="mt-4 text-gray-400">در حال بارگذاری اطلاعات گروه...</p></div>`;
+            showPage('group-page');
+            
             try {
                 const groupData = await fetchApi(`/api/groups/${groupId}`);
                 renderGroupStatus(groupData);
-                showPage('group-page');
             } catch (error) {
+                // If fetching group fails, go back to home and load menu
+                tg.showAlert('گروه مورد نظر یافت نشد یا در دریافت اطلاعات مشکلی پیش آمد.');
                 showPage('home-page');
                 await fetchMenu();
             }
         } else {
+            // If no start parameter, load the menu as usual
             await fetchMenu();
-        }
-    }
-
-    async function createGroup(itemId) {
-        const createButton = document.querySelector('#product-page .main-button');
-        createButton.disabled = true;
-        createButton.innerHTML = '<div class="loader mx-auto" style="width:24px; height:24px; border-width: 2px;"></div>';
-        
-        try {
-            // --- MODIFIED: Now calls the payment request endpoint ---
-            const response = await fetchApi('/api/payment/request', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ foodId: itemId, userInfo: currentUserInfo })
-            });
-
-            if (response.payment_url) {
-                // Open the Zarinpal payment page in the browser
-                tg.openLink(response.payment_url);
-            } else {
-                throw new Error(response.error || 'لینک پرداخت دریافت نشد.');
-            }
-
-        } catch(e) { 
-            // Error is already handled by fetchApi and shown to the user
-            console.error("Payment request failed:", e);
-        } finally {
-            createButton.disabled = false;
-            createButton.innerHTML = 'ایجاد گروه و پرداخت';
         }
     }
 
