@@ -345,6 +345,35 @@
         }
     }
 
+    async function createGroup(itemId) {
+        const createButton = document.querySelector('#product-page .main-button');
+        createButton.disabled = true;
+        createButton.innerHTML = '<div class="loader mx-auto" style="width:24px; height:24px; border-width: 2px;"></div>';
+        
+        try {
+            // --- MODIFIED: Now calls the payment request endpoint ---
+            const response = await fetchApi('/api/payment/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ foodId: itemId, userInfo: currentUserInfo })
+            });
+
+            if (response.payment_url) {
+                // Open the Zarinpal payment page in the browser
+                tg.openLink(response.payment_url);
+            } else {
+                throw new Error(response.error || 'لینک پرداخت دریافت نشد.');
+            }
+
+        } catch(e) { 
+            // Error is already handled by fetchApi and shown to the user
+            console.error("Payment request failed:", e);
+        } finally {
+            createButton.disabled = false;
+            createButton.innerHTML = 'ایجاد گروه و پرداخت';
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", handleInitialLoad);
 
 </script>
