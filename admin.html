@@ -9,10 +9,11 @@
 </head>
 <body class="bg-gray-100 text-gray-800">
     <div class="container mx-auto p-8">
-        <h1 class="text-3xl font-bold mb-6">پنل مدیریت منوی غذا</h1>
+        <h1 class="text-3xl font-bold mb-6">پنل مدیریت هم‌غذا</h1>
 
+        <!-- Food Management -->
         <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-            <h2 id="form-title" class="text-xl font-bold mb-4">افزودن غذای جدید</h2>
+            <h2 id="form-title" class="text-xl font-bold mb-4">مدیریت منوی غذا</h2>
             <form id="food-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input type="hidden" id="food-id">
                 <input type="text" id="name" placeholder="نام غذا" class="p-2 border rounded" required>
@@ -27,12 +28,16 @@
                 </div>
             </form>
         </div>
-
-        <div>
+        <div class="mb-8">
             <h2 class="text-xl font-bold mb-4">لیست غذاهای موجود</h2>
-            <div id="food-list" class="space-y-4">
-                <p>در حال بارگذاری...</p>
-            </div>
+            <div id="food-list" class="space-y-4"><p>در حال بارگذاری...</p></div>
+        </div>
+
+        <!-- Group Management -->
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-bold mb-4">مدیریت گروه‌ها</h2>
+            <button onclick="fetchGroups()" class="bg-indigo-600 text-white p-3 rounded-lg font-bold mb-4 hover:bg-indigo-700">بارگذاری مجدد گروه‌ها</button>
+            <div id="group-list" class="space-y-4"></div>
         </div>
     </div>
 
@@ -43,6 +48,7 @@
     const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SECRET_KEY}` };
 
     const foodListDiv = document.getElementById('food-list');
+    const groupListDiv = document.getElementById('group-list');
     const foodForm = document.getElementById('food-form');
     const formTitle = document.getElementById('form-title');
     const submitBtn = document.getElementById('submit-btn');
@@ -51,28 +57,46 @@
 
     let allFoods = [];
 
-    async function fetchFoods() {
+    async function apiRequest(endpoint, options = {}) {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/foods`, { headers });
-            if (!response.ok) throw new Error('خطا در دریافت لیست غذاها. کلید مخفی را بررسی کنید.');
-            allFoods = await response.json();
-            renderFoods(allFoods);
+            const response = await fetch(endpoint, { headers, ...options });
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({error: 'خطای ناشناخته'}));
+                throw new Error(err.error || 'یک خطا رخ داد');
+            }
+            return response.json();
         } catch (error) {
-            foodListDiv.innerHTML = `<p class="text-red-500">${error.message}</p>`;
+            alert(error.message);
+            throw error;
         }
     }
 
+    async function fetchFoods() {
+        try {
+            allFoods = await apiRequest(`${API_BASE_URL}/api/admin/foods`);
+            renderFoods(allFoods);
+        } catch (e) { foodListDiv.innerHTML = `<p class="text-red-500">خطا در دریافت لیست غذاها.</p>`; }
+    }
+
+    async function fetchGroups() {
+        groupListDiv.innerHTML = '<p>در حال بارگذاری گروه‌ها...</p>';
+        try {
+            const groups = await apiRequest(`${API_BASE_URL}/api/admin/groups`);
+            renderGroups(groups);
+        } catch (e) { groupListDiv.innerHTML = `<p class="text-red-500">خطا در دریافت لیست گروه‌ها.</p>`; }
+    }
+    
     function renderFoods(foods) {
         foodListDiv.innerHTML = '';
         foods.forEach(food => {
             const card = document.createElement('div');
             card.className = `p-4 rounded-lg shadow-md ${food.is_active ? 'bg-white' : 'bg-gray-300'}`;
             card.innerHTML = `
-                <div class="flex justify-between items-center">
+                <div class="flex justify-between items-center flex-wrap gap-2">
                     <h3 class="font-bold text-lg">${food.name} - ${food.groupPrice.toLocaleString('fa-IR')} تومان</h3>
                     <div class="flex gap-2">
-                        <button onclick="editFood(${food.id})" class="text-sm px-3 py-1 rounded bg-yellow-500 text-white">ویرایش</button>
-                        <button onclick="toggleStatus(${food.id}, ${food.is_active ? 0 : 1})" class="text-sm px-3 py-1 rounded ${food.is_active ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}">
+                        <button onclick="editFood(${food.id})" class="text-sm px-3 py-1 rounded bg-yellow-500 text-white hover:bg-yellow-600">ویرایش</button>
+                        <button onclick="toggleStatus(${food.id}, ${food.is_active ? 0 : 1})" class="text-sm px-3 py-1 rounded ${food.is_active ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-green-500 text-white hover:bg-green-600'}">
                             ${food.is_active ? 'غیرفعال' : 'فعال'}
                         </button>
                     </div>
@@ -80,6 +104,45 @@
             `;
             foodListDiv.appendChild(card);
         });
+    }
+    
+    function renderGroups(groups) {
+        groupListDiv.innerHTML = '';
+        if (groups.length === 0) {
+            groupListDiv.innerHTML = '<p>هیچ گروهی یافت نشد.</p>';
+            return;
+        }
+        groups.forEach(group => {
+            const card = document.createElement('div');
+            const statusClass = group.status === 'pending' ? 'border-yellow-500' : (group.status === 'completed' ? 'border-green-500' : 'border-red-500');
+            card.className = `p-4 rounded-lg shadow-md bg-white border-l-4 ${statusClass}`;
+            card.innerHTML = `
+                <div class="flex justify-between items-center flex-wrap gap-2">
+                    <div>
+                        <h3 class="font-bold">گروه #${group.id} - ${group.food_name}</h3>
+                        <p class="text-sm text-gray-600">وضعیت: ${group.status} | اعضا: ${group.member_count}/${group.minMembers}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        ${group.status === 'pending' ? `
+                        <button onclick="updateGroupStatus(${group.id}, 'completed')" class="text-sm px-3 py-1 rounded bg-green-500 text-white hover:bg-green-600">تکمیل</button>
+                        <button onclick="updateGroupStatus(${group.id}, 'failed')" class="text-sm px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600">لغو</button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            groupListDiv.appendChild(card);
+        });
+    }
+
+    async function updateGroupStatus(id, status) {
+        if (!confirm(`آیا از تغییر وضعیت گروه به "${status}" مطمئن هستید؟`)) return;
+        try {
+            await apiRequest(`${API_BASE_URL}/api/admin/groups/${id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ status })
+            });
+            fetchGroups();
+        } catch (e) { /* error handled in apiRequest */ }
     }
 
     function editFood(id) {
@@ -128,33 +191,27 @@
         };
 
         try {
-            const response = await fetch(url, { method, headers, body: JSON.stringify(formData) });
-            if (!response.ok) throw new Error(`خطا در ${id ? 'ویرایش' : 'افزودن'} غذا`);
-            cancelBtn.click(); // Reset form
+            await apiRequest(url, { method, body: JSON.stringify(formData) });
+            cancelBtn.click();
             fetchFoods();
-        } catch (error) {
-            alert(error.message);
-        }
+        } catch (e) { /* error handled in apiRequest */ }
     });
 
     async function toggleStatus(id, newStatus) {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/admin/foods/${id}`, {
+            await apiRequest(`${API_BASE_URL}/api/admin/foods/${id}`, {
                 method: 'PUT',
-                headers,
                 body: JSON.stringify({ is_active: newStatus })
             });
-            if (!response.ok) throw new Error('خطا در تغییر وضعیت');
             fetchFoods();
-        } catch (error) {
-            alert(error.message);
-        }
+        } catch (e) { /* error handled in apiRequest */ }
     }
 
     if (SECRET_KEY) {
         fetchFoods();
+        fetchGroups();
     } else {
-        foodListDiv.innerHTML = '<p class="text-red-500">کلید مخفی برای دسترسی به پنل ادمین الزامی است.</p>';
+        document.body.innerHTML = '<div class="text-center p-8"><h1 class="text-2xl font-bold text-red-600">دسترسی غیرمجاز</h1><p>کلید مخفی برای دسترسی به پنل ادمین الزامی است.</p></div>';
     }
 </script>
 </body>
