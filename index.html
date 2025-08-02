@@ -96,7 +96,7 @@
     const API_BASE_URL = "https://rareff.pythonanywhere.com"; 
     let foodMenuData = [];
     let currentUserInfo = {};
-    let countdownInterval; // To hold the timer interval
+    let countdownInterval;
 
     const tg = window.Telegram.WebApp;
     tg.ready();
@@ -109,7 +109,6 @@
     const statusMessageDiv = document.getElementById('status-message');
 
     function showPage(pageId) {
-        // Clear any existing countdown timer when changing pages
         if (countdownInterval) {
             clearInterval(countdownInterval);
         }
@@ -125,7 +124,6 @@
                 const errorData = await response.json().catch(() => ({ error: `خطای سرور: ${response.status}` }));
                 throw new Error(errorData.error);
             }
-            // Handle cases where the response might be empty
             const text = await response.text();
             return text ? JSON.parse(text) : {};
         } catch (error) {
@@ -163,7 +161,6 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ foodId: itemId, userInfo: currentUserInfo })
             });
-            // After creating, fetch the full group details to display
             const groupData = await fetchApi(`/api/groups/${response.groupId}`);
             renderGroupStatus(groupData);
             showPage('group-page');
@@ -171,6 +168,24 @@
         finally {
             createButton.disabled = false;
             createButton.innerHTML = 'ایجاد گروه و پرداخت';
+        }
+    }
+    
+    async function joinGroup(groupId) {
+        const joinButton = document.querySelector('#group-page .main-button');
+        joinButton.disabled = true;
+        joinButton.innerHTML = '<div class="loader mx-auto" style="width:24px; height:24px; border-width: 2px;"></div>';
+        try {
+            const updatedGroup = await fetchApi(`/api/groups/${groupId}/join`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userInfo: currentUserInfo })
+            });
+            renderGroupStatus(updatedGroup);
+        } catch(e) { /* Error is already handled by fetchApi */ }
+        finally {
+            joinButton.disabled = false;
+            joinButton.innerHTML = 'پیوستن به گروه';
         }
     }
 
@@ -218,13 +233,25 @@
     function renderGroupStatus(groupData) {
         const progress = (groupData.members.length / groupData.minMembers) * 100;
         const isMember = groupData.members.some(member => member.id === currentUserInfo.id);
-        const isFull = groupData.members.length >= groupData.minMembers;
         
+        let statusDisplay = '';
         let actionButton = '';
-        if (!isMember && !isFull) {
-            actionButton = `<button onclick="joinGroup(${groupData.groupId})" class="main-button w-full mt-6">پیوستن به گروه</button>`;
-        } else if (isFull) {
-            actionButton = `<div class="mt-6 p-3 text-center bg-green-500 text-white font-bold rounded-lg">گروه تکمیل شد!</div>`;
+
+        if (groupData.status === 'failed') {
+            statusDisplay = `<div class="mt-6 p-3 text-center bg-red-700 text-white font-bold rounded-lg">متاسفانه این گروه به حد نصاب نرسید!</div>`;
+        } else if (groupData.status === 'completed') {
+            statusDisplay = `<div class="mt-6 p-3 text-center bg-green-600 text-white font-bold rounded-lg">گروه تکمیل شد!</div>`;
+        } else { // status is 'pending'
+            if (!isMember) {
+                actionButton = `<button onclick="joinGroup(${groupData.groupId})" class="main-button w-full mt-6">پیوستن به گروه</button>`;
+            }
+            statusDisplay = `
+                <div id="countdown-timer-container" class="text-center my-6">
+                    <p class="text-gray-400">زمان باقی‌مانده برای تکمیل گروه:</p>
+                    <p id="countdown-timer" class="text-4xl font-mono font-bold text-red-500">00:00:00</p>
+                </div>
+            `;
+            startCountdown(groupData.timeRemaining);
         }
 
         const invitationLink = `https://t.me/YOUR_BOT_USERNAME?startapp=group_${groupData.groupId}`;
@@ -238,13 +265,9 @@
                 <div class="w-full bg-gray-600 rounded-full h-2.5"><div class="bg-yellow-400 h-2.5 rounded-full" style="width: ${progress}%"></div></div>
             </div>
 
-            <!-- NEW: Countdown Timer Display -->
-            <div id="countdown-timer-container" class="text-center my-6">
-                <p class="text-gray-400">زمان باقی‌مانده برای تکمیل گروه:</p>
-                <p id="countdown-timer" class="text-4xl font-mono font-bold text-red-500">00:00:00</p>
-            </div>
+            ${statusDisplay}
 
-            <div class="mb-6">
+            <div class="mb-6 mt-6">
                 <label class="block text-sm font-medium text-gray-300 mb-2">لینک دعوت شما:</label>
                 <div class="flex items-center">
                     <input type="text" readonly value="${invitationLink}" class="w-full p-2 bg-gray-900 border border-gray-600 rounded-lg text-gray-300 font-mono text-sm" id="invite-link-input">
@@ -260,13 +283,10 @@
             </div>
             ${actionButton}
         `;
-        startCountdown(groupData.timeRemaining);
     }
     
     function startCountdown(remainingSeconds) {
-        if (countdownInterval) {
-            clearInterval(countdownInterval);
-        }
+        if (countdownInterval) clearInterval(countdownInterval);
         
         let duration = remainingSeconds;
         const timerElement = document.getElementById('countdown-timer');
@@ -275,7 +295,9 @@
         countdownInterval = setInterval(() => {
             if (duration <= 0) {
                 clearInterval(countdownInterval);
-                timerContainer.innerHTML = '<p class="text-red-500 font-bold">زمان گروه به پایان رسید!</p>';
+                if (timerContainer) {
+                    timerContainer.innerHTML = '<p class="text-red-500 font-bold">زمان گروه به پایان رسید!</p>';
+                }
                 return;
             }
 
@@ -283,11 +305,17 @@
             const minutes = Math.floor((duration % 3600) / 60);
             const seconds = duration % 60;
 
-            timerElement.textContent = 
-                `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            if(timerElement) {
+                timerElement.textContent = 
+                    `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
             
             duration--;
         }, 1000);
+    }
+    
+    function copyInviteLink() {
+        // ... (same as before)
     }
 
     async function handleInitialLoad() {
