@@ -210,15 +210,87 @@
     }
 
     function renderGroupStatus(groupData) {
-        // ... (same as before) ...
+        const progress = (groupData.members.length / groupData.minMembers) * 100;
+        const isMember = groupData.members.some(member => member.id === currentUserInfo.id);
+        const isFull = groupData.members.length >= groupData.minMembers;
+        
+        let actionButton = '';
+        if (!isMember && !isFull) {
+            actionButton = `<button onclick="joinGroup(${groupData.groupId})" class="main-button w-full mt-6">پیوستن به گروه</button>`;
+        } else if (isFull) {
+            actionButton = `<div class="mt-6 p-3 text-center bg-green-500 text-white font-bold rounded-lg">گروه تکمیل شد!</div>`;
+        }
+
+        const invitationLink = `https://t.me/YOUR_BOT_USERNAME?startapp=group_${groupData.groupId}`;
+
+        groupStatusContent.innerHTML = `
+            <h3 class="text-2xl font-bold mb-4">گروه برای ${groupData.foodName}</h3>
+            <p class="text-gray-400 mb-6">شناسه گروه: <span class="font-mono text-yellow-400">${groupData.groupId}</span></p>
+            
+            <div class="mb-4">
+                <p class="text-sm text-gray-300 mb-1">${groupData.members.length} از ${groupData.minMembers} نفر</p>
+                <div class="w-full bg-gray-600 rounded-full h-2.5"><div class="bg-yellow-400 h-2.5 rounded-full" style="width: ${progress}%"></div></div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-300 mb-2">لینک دعوت شما:</label>
+                <div class="flex items-center">
+                    <input type="text" readonly value="${invitationLink}" class="w-full p-2 bg-gray-900 border border-gray-600 rounded-lg text-gray-300 font-mono text-sm" id="invite-link-input">
+                    <button onclick="copyInviteLink()" class="mr-2 p-2 bg-gray-600 rounded-lg hover:bg-gray-500">کپی</button>
+                </div>
+            </div>
+
+            <div class="mt-6">
+                <h4 class="font-bold mb-2">اعضای گروه:</h4>
+                <ul class="list-disc pr-5 text-gray-300">
+                    ${groupData.members.map(member => `<li>${member.first_name} (${member.username ? '@'+member.username : '...'})</li>`).join('')}
+                </ul>
+            </div>
+            ${actionButton}
+        `;
     }
     
     function startCountdown(remainingSeconds) {
-        // ... (same as before) ...
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+        
+        let duration = remainingSeconds;
+        const timerElement = document.getElementById('countdown-timer');
+        const timerContainer = document.getElementById('countdown-timer-container');
+
+        countdownInterval = setInterval(() => {
+            if (duration <= 0) {
+                clearInterval(countdownInterval);
+                if (timerContainer) {
+                    timerContainer.innerHTML = '<p class="text-red-500 font-bold">زمان گروه به پایان رسید!</p>';
+                }
+                return;
+            }
+
+            const hours = Math.floor(duration / 3600);
+            const minutes = Math.floor((duration % 3600) / 60);
+            const seconds = duration % 60;
+
+            if(timerElement) {
+                timerElement.textContent = 
+                    `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
+            
+            duration--;
+        }, 1000);
     }
     
     function copyInviteLink() {
-        // ... (same as before) ...
+        const input = document.getElementById('invite-link-input');
+        input.select();
+        input.setSelectionRange(0, 99999); // For mobile devices
+        try {
+            document.execCommand('copy');
+            tg.showAlert('لینک دعوت کپی شد!');
+        } catch (err) {
+            tg.showAlert('خطا در کپی کردن لینک.');
+        }
     }
 
     async function handleInitialLoad() {
@@ -232,11 +304,9 @@
 
         const startParam = tg.initDataUnsafe?.start_param;
         
-        // --- NEW LOGIC ---
         if (startParam && startParam.startsWith('group_')) {
             const groupId = startParam.split('_')[1];
             
-            // Show a loading state specifically for the group page
             groupStatusContent.innerHTML = `<div class="text-center p-8"><div class="loader mx-auto"></div><p class="mt-4 text-gray-400">در حال بارگذاری اطلاعات گروه...</p></div>`;
             showPage('group-page');
             
@@ -244,13 +314,11 @@
                 const groupData = await fetchApi(`/api/groups/${groupId}`);
                 renderGroupStatus(groupData);
             } catch (error) {
-                // If fetching group fails, go back to home and load menu
                 tg.showAlert('گروه مورد نظر یافت نشد یا در دریافت اطلاعات مشکلی پیش آمد.');
                 showPage('home-page');
                 await fetchMenu();
             }
         } else {
-            // If no start parameter, load the menu as usual
             await fetchMenu();
         }
     }
