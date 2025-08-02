@@ -168,6 +168,23 @@
         }
     }
 
+    async function joinGroup(groupId) {
+        const joinButton = document.querySelector('#group-page .main-button');
+        joinButton.disabled = true;
+        joinButton.innerHTML = '<div class="loader mx-auto" style="width:24px; height:24px; border-width: 2px;"></div>';
+        try {
+            const updatedGroup = await fetchApi(`/api/groups/${groupId}/join`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userInfo: currentUserInfo })
+            });
+            renderGroupStatus(updatedGroup);
+        } catch(e) { /* Error is already handled by fetchApi */ }
+        finally {
+            // The button will be removed on successful render, so no need to re-enable it
+        }
+    }
+
     function renderMenu() {
         foodMenuGrid.innerHTML = '';
         foodMenuData.forEach(item => {
@@ -221,7 +238,7 @@
             actionButton = `<div class="mt-6 p-3 text-center bg-green-500 text-white font-bold rounded-lg">گروه تکمیل شد!</div>`;
         }
 
-        const invitationLink = `https://t.me/YOUR_BOT_USERNAME?startapp=group_${groupData.groupId}`;
+        const invitationLink = `https://t.me/${YOUR_BOT_USERNAME || 'YourBot'}/app?startapp=group_${groupData.groupId}`;
 
         groupStatusContent.innerHTML = `
             <h3 class="text-2xl font-bold mb-4">گروه برای ${groupData.foodName}</h3>
@@ -250,41 +267,10 @@
         `;
     }
     
-    function startCountdown(remainingSeconds) {
-        if (countdownInterval) {
-            clearInterval(countdownInterval);
-        }
-        
-        let duration = remainingSeconds;
-        const timerElement = document.getElementById('countdown-timer');
-        const timerContainer = document.getElementById('countdown-timer-container');
-
-        countdownInterval = setInterval(() => {
-            if (duration <= 0) {
-                clearInterval(countdownInterval);
-                if (timerContainer) {
-                    timerContainer.innerHTML = '<p class="text-red-500 font-bold">زمان گروه به پایان رسید!</p>';
-                }
-                return;
-            }
-
-            const hours = Math.floor(duration / 3600);
-            const minutes = Math.floor((duration % 3600) / 60);
-            const seconds = duration % 60;
-
-            if(timerElement) {
-                timerElement.textContent = 
-                    `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-            }
-            
-            duration--;
-        }, 1000);
-    }
-    
     function copyInviteLink() {
         const input = document.getElementById('invite-link-input');
         input.select();
-        input.setSelectionRange(0, 99999); // For mobile devices
+        input.setSelectionRange(0, 99999);
         try {
             document.execCommand('copy');
             tg.showAlert('لینک دعوت کپی شد!');
