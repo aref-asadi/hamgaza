@@ -127,6 +127,7 @@
                         <button onclick="updateGroupStatus(${group.id}, 'completed')" class="text-sm px-3 py-1 rounded bg-green-500 text-white hover:bg-green-600">تکمیل</button>
                         <button onclick="updateGroupStatus(${group.id}, 'failed')" class="text-sm px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600">لغو</button>
                         ` : ''}
+                        <button onclick="deleteGroup(${group.id})" class="text-sm px-3 py-1 rounded bg-gray-700 text-white hover:bg-gray-800">حذف</button>
                     </div>
                 </div>
             `;
@@ -140,6 +141,16 @@
             await apiRequest(`${API_BASE_URL}/api/admin/groups/${id}`, {
                 method: 'PUT',
                 body: JSON.stringify({ status })
+            });
+            fetchGroups();
+        } catch (e) { /* error handled in apiRequest */ }
+    }
+
+    async function deleteGroup(id) {
+        if (!confirm(`آیا از حذف کامل گروه #${id} مطمئن هستید؟ این عمل غیرقابل بازگشت است.`)) return;
+        try {
+            await apiRequest(`${API_BASE_URL}/api/admin/groups/${id}`, {
+                method: 'DELETE'
             });
             fetchGroups();
         } catch (e) { /* error handled in apiRequest */ }
